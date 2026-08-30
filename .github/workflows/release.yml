@@ -76,8 +76,13 @@ jobs:
             shasum -a 256 --check --ignore-missing SHA256SUMS
           fi
           unzip -q ${{ matrix.rclone_zip }}
-          cp ${{ matrix.rclone_folder }}/rclone* ${{ matrix.rclone_bin }}
+          if [ -f "${{ matrix.rclone_folder }}/rclone.exe" ]; then
+            cp "${{ matrix.rclone_folder }}/rclone.exe" "${{ matrix.rclone_bin }}"
+          else
+            cp "${{ matrix.rclone_folder }}/rclone" "${{ matrix.rclone_bin }}"
+          fi
           chmod +x src-tauri/bin/* || true
+
 
       - name: Import Windows Authenticode Certificate and Configure Tauri
         if: matrix.platform == 'windows-latest'
