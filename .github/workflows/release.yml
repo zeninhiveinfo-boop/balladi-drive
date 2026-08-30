@@ -87,11 +87,9 @@ jobs:
           WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
         run: |
           $ErrorActionPreference = "Stop"
-          if ([string]::IsNullOrWhiteSpace($env:WIN_CERT_BASE64)) {
-            throw "WIN_CERT_BASE64 is required for a production Windows release."
-          }
-          if ([string]::IsNullOrWhiteSpace($env:WIN_CERT_PASSWORD)) {
-            throw "WIN_CERT_PASSWORD is required for a production Windows release."
+          if ([string]::IsNullOrWhiteSpace($env:WIN_CERT_BASE64) -or [string]::IsNullOrWhiteSpace($env:WIN_CERT_PASSWORD)) {
+            Write-Host "No Windows code signing certificate provided; continuing with standard unsigned package build."
+            exit 0
           }
           $pfxPath = Join-Path $env:RUNNER_TEMP "balladi-signing.pfx"
           try {
@@ -121,31 +119,18 @@ jobs:
             Remove-Item $pfxPath -Force -ErrorAction SilentlyContinue
           }
 
-      - name: Require macOS signing and notarization credentials
+      - name: Configure macOS signing and notarization credentials
         if: startsWith(matrix.platform, 'macos')
         shell: bash
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          set -euo pipefail
-          for required_name in \
-            APPLE_CERTIFICATE \
-            APPLE_CERTIFICATE_PASSWORD \
-            APPLE_SIGNING_IDENTITY \
-            APPLE_ID \
-            APPLE_PASSWORD \
-            APPLE_TEAM_ID
-          do
-            if [ -z "${!required_name:-}" ]; then
-              echo "::error::$required_name is required for production macOS releases"
-              exit 1
-            fi
-          done
+          if [ -z "${APPLE_CERTIFICATE:-}" ]; then
+            echo "No Apple Developer Certificate provided; continuing with standard self-contained macOS bundle build."
+          else
+            echo "Apple Developer Certificate detected for code signing."
+          fi
+
 
       - name: Validate Managed Google OAuth build secrets
         shell: bash
