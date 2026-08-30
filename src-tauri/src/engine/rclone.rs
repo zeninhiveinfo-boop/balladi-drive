@@ -353,14 +353,13 @@ pub fn build_transfer_request(
     dst: &str,
     mode: TransferMode,
 ) -> Result<TransferRequest, String> {
-    let production_config = json!({
-        "DriveChunkSize": "32M",
+    let base_config = json!({
+        "DriveChunkSize": "128M",
         "DriveUploadCutoff": "16M",
         "DriveAcknowledgeAbuse": true,
         "DriveStopOnUploadLimit": true,
         "BufferSize": "16M",
         "Checkers": 8,
-        "Transfers": 4,
         "LowLevelRetries": 10,
         "Retries": 3,
         "Timeout": "5m"
@@ -397,8 +396,9 @@ pub fn build_transfer_request(
                 (src.to_string(), "gdrive:".to_string())
             };
 
-            let mut cfg = production_config.clone();
+            let mut cfg = base_config.clone();
             if let Some(obj) = cfg.as_object_mut() {
+                obj.insert("Transfers".to_string(), json!(4));
                 obj.insert("MultiThreadStreams".to_string(), json!(4));
                 obj.insert("MultiThreadCutoff".to_string(), json!("50M"));
             }
@@ -427,6 +427,11 @@ pub fn build_transfer_request(
                 .map(|f| f.to_string_lossy().to_string())
                 .unwrap_or_default();
 
+            let mut cfg = base_config.clone();
+            if let Some(obj) = cfg.as_object_mut() {
+                obj.insert("Transfers".to_string(), json!(1));
+            }
+
             Ok(TransferRequest {
                 normalized_destination: dst.to_string(),
                 method: "operations/copyfile",
@@ -436,14 +441,15 @@ pub fn build_transfer_request(
                     "dstFs": dst,
                     "dstRemote": file_name,
                     "_async": true,
-                    "_config": production_config.clone()
+                    "_config": cfg
                 }),
                 mode,
             })
         }
         TransferMode::DirectoryUpload => {
-            let mut cfg = production_config.clone();
+            let mut cfg = base_config.clone();
             if let Some(obj) = cfg.as_object_mut() {
+                obj.insert("Transfers".to_string(), json!(8));
                 obj.insert("CreateEmptySrcDirs".to_string(), json!(true));
                 obj.insert("CheckFirst".to_string(), json!(false));
             }
@@ -464,8 +470,11 @@ pub fn build_transfer_request(
             })
         }
         TransferMode::DirectoryDownload => {
-            let mut cfg = production_config.clone();
+            let mut cfg = base_config.clone();
             if let Some(obj) = cfg.as_object_mut() {
+                obj.insert("Transfers".to_string(), json!(4));
+                obj.insert("MultiThreadStreams".to_string(), json!(4));
+                obj.insert("MultiThreadCutoff".to_string(), json!("50M"));
                 obj.insert("CreateEmptySrcDirs".to_string(), json!(true));
                 obj.insert("CheckFirst".to_string(), json!(false));
             }
@@ -484,6 +493,7 @@ pub fn build_transfer_request(
         }
     }
 }
+
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TransferState {
@@ -706,7 +716,7 @@ impl RcloneManager {
                     "--rc-web-gui=false",
                     "--rc-serve=false",
                     "--drive-chunk-size",
-                    "32M",
+                    "128M",
                     "--drive-upload-cutoff",
                     "16M",
                     "--drive-acknowledge-abuse",
