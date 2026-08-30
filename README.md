@@ -86,17 +86,21 @@ The compiled installer will be generated in `src-tauri/target/release/bundle/dmg
 
 ---
 
-## Studio Google Cloud OAuth (Managed by Balladi Studios)
+## Studio Google Cloud OAuth (Managed vs Custom)
 
-Balladi Drive uses **Managed Google OAuth**:
-- **Zero Configuration for Users**: Production builds embed the Balladi Google Desktop Client ID and Secret at build time. Users only click **"Connect Google Account"** in the app.
-- **Personal Authorization**: Every team member signs into their own personal or Google Workspace account in the browser.
-- **Dedicated Studio Quota**: API calls use the Balladi Drive project quota to prevent `403 RATE_LIMIT_EXCEEDED` errors and bypass rclone's shared client retirement in 2026.
-- **Fail-Closed Security**: Secrets are never committed to git, exposed via Tauri IPC, or displayed in UI or log output. Release builds in CI validate secrets before compilation.
+### 1. Managed OAuth (Studio Distribution)
+Production builds released by Balladi Studios embed the studio's Google Desktop Client ID and Secret at build time. Users only click **"Connect Google Account"** in the app to authenticate with dedicated studio API quotas.
+
+### 2. Custom OAuth (Open-Source Developers)
+If you clone this repository without the Balladi Studios build keys, you can use your own Google Cloud Console project:
+1. Create a Google Cloud Project with the **Google Drive API** enabled.
+2. Configure the OAuth consent screen (Desktop App).
+3. In **Balladi Drive Settings**, open **"Advanced: Custom OAuth Project"**.
+4. Enter your `Client ID` and `Client Secret`, then click **"Connect Google Account"**.
 
 ---
 
-## Automated Updates (GitHub Releases)
+## Automated CI/CD Releases (GitHub Actions)
 
 When you push a Git tag to your GitHub repository:
 ```bash
@@ -104,12 +108,15 @@ git tag v1.0.0
 git push --tags
 ```
 The included GitHub Actions workflow (`.github/workflows/release.yml`) will automatically:
-1. Compile the Apple Silicon macOS `.dmg` and Windows `.msi` installers.
-2. Bundle the tuned `rclone` binary.
-3. Publish a new GitHub Release with all download assets ready for your team.
+1. Validate release environment secrets (`BALLADI_GOOGLE_CLIENT_ID`, `BALLADI_GOOGLE_CLIENT_SECRET`).
+2. Compile and package the Apple Silicon macOS `.dmg` and Windows `.msi` installers.
+3. Bundle the tuned `rclone` binary.
+4. Publish a new GitHub Release with all download assets ready for your team.
 
 ---
 
 ## License & Credits
 
-Built for media production studios. Transfer engine powered by [rclone](https://rclone.org) (MIT License). GUI powered by [Tauri](https://tauri.app).
+Released under the [MIT License](LICENSE).  
+Transfer engine powered by [rclone](https://rclone.org) (MIT License). GUI powered by [Tauri 2.0](https://tauri.app) and React.
+
