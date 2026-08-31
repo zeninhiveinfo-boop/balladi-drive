@@ -20,7 +20,7 @@ jobs:
     permissions:
       contents: write
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - platform: "macos-latest"
@@ -48,7 +48,7 @@ jobs:
 
     steps:
       - name: Checkout tagged source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ env.RELEASE_TAG }}
 
@@ -86,7 +86,7 @@ jobs:
           }
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: "npm"
@@ -98,15 +98,6 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci
-
-      - name: Run frontend tests and production build
-        run: npm test && npm run build
-
-      - name: Run Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
-
-      - name: Run strict Rust quality checks
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --target ${{ matrix.target }} -- -D warnings
 
       - name: Prepare pinned rclone engine binary with SHA256 verification
         shell: bash
@@ -129,6 +120,15 @@ jobs:
             cp "${{ matrix.rclone_folder }}/rclone" "${{ matrix.rclone_bin }}"
           fi
           chmod +x src-tauri/bin/* || true
+
+      - name: Run frontend tests and production build
+        run: npm test && npm run build
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
+
+      - name: Run strict Rust quality checks
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --target ${{ matrix.target }} -- -D warnings
 
       - name: Validate managed Google OAuth build secrets
         shell: bash
