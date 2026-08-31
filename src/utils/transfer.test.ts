@@ -8,6 +8,7 @@ import {
   classifyFailureKind,
   deriveTransferPhase,
   mergeCompletedEntry,
+  resolveDisplayMetrics,
   CompletedLedgerEntry,
 } from "./transfer.ts";
 
@@ -86,6 +87,55 @@ describe("transfer utilities", () => {
     assert.equal(progress.logicalProgressBytes, 1_041_078_181);
     assert.equal(progress.percentage, 100);
     assert.equal(progress.committedCount, 2);
+  });
+
+  it("keeps retry-inflated raw bytes out of displayed logical progress", () => {
+    const displayed = resolveDisplayMetrics(
+      {
+        totalBytes: 1_000,
+        transferredBytes: 700,
+        completedFiles: 1,
+        alreadyOnDiskFiles: 0,
+        percentage: 70,
+      },
+      {
+        totalBytes: 1_000,
+        transferredBytes: 1_300,
+        completedFiles: 3,
+        alreadyOnDiskFiles: 0,
+        percentage: 100,
+      }
+    );
+
+    assert.equal(displayed.totalBytes, 1_000);
+    assert.equal(displayed.transferredBytes, 700);
+    assert.equal(displayed.completedFiles, 1);
+    assert.equal(displayed.percentage, 70);
+  });
+
+  it("uses raw metrics only before the logical session ledger initializes", () => {
+    const displayed = resolveDisplayMetrics(
+      {
+        totalBytes: 0,
+        transferredBytes: 0,
+        completedFiles: 0,
+        alreadyOnDiskFiles: 0,
+        percentage: 0,
+      },
+      {
+        totalBytes: 2_000,
+        transferredBytes: 500,
+        completedFiles: 1,
+        alreadyOnDiskFiles: 2,
+        percentage: 25,
+      }
+    );
+
+    assert.equal(displayed.totalBytes, 2_000);
+    assert.equal(displayed.transferredBytes, 500);
+    assert.equal(displayed.completedFiles, 1);
+    assert.equal(displayed.alreadyOnDiskFiles, 2);
+    assert.equal(displayed.percentage, 25);
   });
 
   it("credits checked already-present files with full logical size and count", () => {

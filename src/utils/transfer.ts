@@ -76,6 +76,59 @@ export interface CompletedLedgerEntry {
   checked?: boolean;
 }
 
+export interface DisplayTransferMetrics {
+  totalBytes: number;
+  transferredBytes: number;
+  completedFiles: number;
+  alreadyOnDiskFiles: number;
+  percentage: number;
+}
+
+/**
+ * Selects retry-safe logical metrics once the session ledger is initialized.
+ * Raw rclone byte counters represent wire traffic and may include retries, so
+ * they are only a bootstrap fallback before a logical total is available.
+ */
+export function resolveDisplayMetrics(
+  session: DisplayTransferMetrics,
+  raw?: Partial<DisplayTransferMetrics> | null
+): DisplayTransferMetrics {
+  if (session.totalBytes > 0) {
+    const transferredBytes = Math.min(
+      session.totalBytes,
+      Math.max(0, session.transferredBytes)
+    );
+
+    return {
+      totalBytes: session.totalBytes,
+      transferredBytes,
+      completedFiles: Math.max(0, session.completedFiles),
+      alreadyOnDiskFiles: Math.max(0, session.alreadyOnDiskFiles),
+      percentage: Math.min(
+        100,
+        Math.max(0, (transferredBytes / session.totalBytes) * 100)
+      ),
+    };
+  }
+
+  const totalBytes = Math.max(0, raw?.totalBytes || 0);
+  const transferredBytes = Math.min(
+    totalBytes || Number.MAX_SAFE_INTEGER,
+    Math.max(0, raw?.transferredBytes || 0)
+  );
+
+  return {
+    totalBytes,
+    transferredBytes,
+    completedFiles: Math.max(0, raw?.completedFiles || 0),
+    alreadyOnDiskFiles: Math.max(0, raw?.alreadyOnDiskFiles || 0),
+    percentage:
+      totalBytes > 0
+        ? Math.min(100, Math.max(0, (transferredBytes / totalBytes) * 100))
+        : Math.min(100, Math.max(0, raw?.percentage || 0)),
+  };
+}
+
 /**
  * Merges an incoming file stat into the completed ledger using success-dominant rules.
  * An earlier successful entry cannot be overwritten by a subsequent transient failure/retry.

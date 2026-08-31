@@ -5,13 +5,22 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing v-prefixed tag to build and publish"
+        required: true
+        default: "v0.2.0"
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   build-and-release:
     permissions:
       contents: write
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
           - platform: "macos-latest"
@@ -20,7 +29,7 @@ jobs:
             rclone_zip: "rclone-v1.75.0-osx-arm64.zip"
             rclone_folder: "rclone-v1.75.0-osx-arm64"
             rclone_bin: "src-tauri/bin/rclone-aarch64-apple-darwin"
-          - platform: "macos-13"
+          - platform: "macos-15-intel"
             target: "x86_64-apple-darwin"
             rclone_ver: "v1.75.0"
             rclone_zip: "rclone-v1.75.0-osx-amd64.zip"
@@ -34,9 +43,47 @@ jobs:
             rclone_bin: "src-tauri/bin/rclone-x86_64-pc-windows-msvc.exe"
 
     runs-on: ${{ matrix.platform }}
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+
     steps:
-      - name: Checkout repository
+      - name: Checkout tagged source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Validate source version and release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${RELEASE_TAG#v}"
+          package_version="$(node -p "require('./package.json').version")"
+          tauri_version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          cargo_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' src-tauri/Cargo.toml | head -1)"
+          test "$package_version" = "$expected"
+          test "$tauri_version" = "$expected"
+          test "$cargo_version" = "$expected"
+
+      - name: Validate macOS runner architecture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_arch="$(uname -m)"
+          case "${{ matrix.target }}" in
+            aarch64-apple-darwin) test "$actual_arch" = "arm64" ;;
+            x86_64-apple-darwin) test "$actual_arch" = "x86_64" ;;
+            *) echo "::error::Unexpected macOS target: ${{ matrix.target }}"; exit 1 ;;
+          esac
+
+      - name: Validate Windows runner architecture
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ($env:PROCESSOR_ARCHITECTURE -ne "AMD64") {
+            throw "Expected an AMD64 Windows runner, got $env:PROCESSOR_ARCHITECTURE"
+          }
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -52,18 +99,30 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Run frontend tests and production build
+        run: npm test && npm run build
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
+
+      - name: Run strict Rust quality checks
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --target ${{ matrix.target }} -- -D warnings
+
       - name: Prepare pinned rclone engine binary with SHA256 verification
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p src-tauri/bin
-          curl -sSL -O https://downloads.rclone.org/${{ matrix.rclone_ver }}/${{ matrix.rclone_zip }}
-          curl -sSL -O https://downloads.rclone.org/${{ matrix.rclone_ver }}/SHA256SUMS
+          curl --fail --silent --show-error --location --output "${{ matrix.rclone_zip }}" \
+            "https://downloads.rclone.org/${{ matrix.rclone_ver }}/${{ matrix.rclone_zip }}"
+          curl --fail --silent --show-error --location --output SHA256SUMS \
+            "https://downloads.rclone.org/${{ matrix.rclone_ver }}/SHA256SUMS"
           if command -v sha256sum >/dev/null 2>&1; then
             sha256sum --check --ignore-missing SHA256SUMS
           else
             shasum -a 256 --check --ignore-missing SHA256SUMS
           fi
-          unzip -q ${{ matrix.rclone_zip }}
+          unzip -q "${{ matrix.rclone_zip }}"
           if [ -f "${{ matrix.rclone_folder }}/rclone.exe" ]; then
             cp "${{ matrix.rclone_folder }}/rclone.exe" "${{ matrix.rclone_bin }}"
           else
@@ -71,32 +130,145 @@ jobs:
           fi
           chmod +x src-tauri/bin/* || true
 
-      - name: Validate Managed Google OAuth build secrets
+      - name: Validate managed Google OAuth build secrets
         shell: bash
         env:
           BALLADI_GOOGLE_CLIENT_ID: ${{ secrets.BALLADI_GOOGLE_CLIENT_ID }}
           BALLADI_GOOGLE_CLIENT_SECRET: ${{ secrets.BALLADI_GOOGLE_CLIENT_SECRET }}
         run: |
           set -euo pipefail
-          if [ -z "${BALLADI_GOOGLE_CLIENT_ID:-}" ]; then
-            echo "::error::BALLADI_GOOGLE_CLIENT_ID secret is required for production builds."
-            exit 1
-          fi
-          if [ -z "${BALLADI_GOOGLE_CLIENT_SECRET:-}" ]; then
-            echo "::error::BALLADI_GOOGLE_CLIENT_SECRET secret is required for production builds."
-            exit 1
-          fi
+          test -n "${BALLADI_GOOGLE_CLIENT_ID:-}" || { echo "::error::BALLADI_GOOGLE_CLIENT_ID is required"; exit 1; }
+          test -n "${BALLADI_GOOGLE_CLIENT_SECRET:-}" || { echo "::error::BALLADI_GOOGLE_CLIENT_SECRET is required"; exit 1; }
 
-      - name: Build Tauri Desktop Application
-        uses: tauri-apps/tauri-action@v0
+      - name: Require macOS signing and notarization credentials
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            test -n "${!name:-}" || { echo "::error::$name is required"; exit 1; }
+          done
+
+      - name: Import and verify Apple Developer ID certificate
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          certificate_path="$RUNNER_TEMP/balladi-developer-id.p12"
+          keychain_path="$RUNNER_TEMP/balladi-build.keychain-db"
+          keychain_password="$(openssl rand -hex 32)"
+
+          printf '%s' "$APPLE_CERTIFICATE" | openssl base64 -d -A -out "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" -k "$keychain_path" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path"
+          security list-keychains -d user -s "$keychain_path" login.keychain-db
+          security default-keychain -d user -s "$keychain_path"
+          security find-identity -v -p codesigning "$keychain_path" | grep -F "$APPLE_SIGNING_IDENTITY"
+
+      - name: Import Windows Authenticode certificate
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WIN_CERT_BASE64: ${{ secrets.WIN_CERT_BASE64 }}
+          WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ([string]::IsNullOrWhiteSpace($env:WIN_CERT_BASE64)) { throw "WIN_CERT_BASE64 is required" }
+          if ([string]::IsNullOrWhiteSpace($env:WIN_CERT_PASSWORD)) { throw "WIN_CERT_PASSWORD is required" }
+
+          $pfxPath = Join-Path $env:RUNNER_TEMP "balladi-code-signing.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WIN_CERT_BASE64))
+          $password = ConvertTo-SecureString $env:WIN_CERT_PASSWORD -AsPlainText -Force
+          $certificate = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation "Cert:\CurrentUser\My" -Password $password
+          if ($null -eq $certificate -or [string]::IsNullOrWhiteSpace($certificate.Thumbprint)) {
+            throw "Windows certificate import did not return a thumbprint"
+          }
+
+          $configPath = "src-tauri/tauri.conf.json"
+          $config = Get-Content $configPath -Raw | ConvertFrom-Json
+          $config.bundle.windows | Add-Member -NotePropertyName certificateThumbprint -NotePropertyValue $certificate.Thumbprint -Force
+          $config | ConvertTo-Json -Depth 100 | Set-Content $configPath -Encoding utf8
+
+      - name: Build signed draft release artifacts
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BALLADI_GOOGLE_CLIENT_ID: ${{ secrets.BALLADI_GOOGLE_CLIENT_ID }}
           BALLADI_GOOGLE_CLIENT_SECRET: ${{ secrets.BALLADI_GOOGLE_CLIENT_SECRET }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Balladi Drive ${{ github.ref_name }}"
-          releaseBody: "Automated production release of Balladi Drive media transfer engine."
-          releaseDraft: false
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: "Balladi Drive ${{ env.RELEASE_TAG }}"
+          releaseBody: "Production release of Balladi Drive with verified high-throughput transfer telemetry and signed desktop packages."
+          releaseDraft: true
           prerelease: false
+          args: --target ${{ matrix.target }}
 
+      - name: Verify macOS signature and notarization
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_dir="src-tauri/target/${{ matrix.target }}/release/bundle"
+          app_path="$(find "$bundle_dir" -type d -name '*.app' -print -quit)"
+          dmg_path="$(find "$bundle_dir" -type f -name '*.dmg' -print -quit)"
+          test -n "$app_path" || { echo "::error::No macOS app bundle found"; exit 1; }
+          test -n "$dmg_path" || { echo "::error::No DMG artifact found"; exit 1; }
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          spctl --assess --type execute --verbose=4 "$app_path"
+          xcrun stapler validate "$dmg_path"
+
+      - name: Verify Windows Authenticode signatures
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $bundleDir = "src-tauri/target/${{ matrix.target }}/release/bundle"
+          $artifacts = @(
+            Get-ChildItem "$bundleDir/nsis" -Filter *.exe -File -ErrorAction SilentlyContinue
+            Get-ChildItem "$bundleDir/msi" -Filter *.msi -File -ErrorAction SilentlyContinue
+          )
+          if ($artifacts.Count -eq 0) { throw "No Windows EXE or MSI artifacts were produced" }
+          foreach ($artifact in $artifacts) {
+            $signature = Get-AuthenticodeSignature $artifact.FullName
+            if ($signature.Status -ne "Valid") {
+              throw "Invalid Authenticode signature on $($artifact.FullName): $($signature.Status)"
+            }
+          }
+
+  publish-release:
+    name: Publish verified release
+    needs: build-and-release
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+    steps:
+      - name: Publish draft only after every platform passes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = "true"
+          gh release edit "$RELEASE_TAG" --draft=false --latest

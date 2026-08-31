@@ -30,7 +30,7 @@ pub fn acquire_sleep_lock() {
     #[cfg(target_os = "macos")]
     {
         if let Ok(child) = Command::new("caffeinate")
-            .args(&["-d", "-i", "-m", "-u"])
+            .args(["-d", "-i", "-m", "-u"])
             .spawn()
         {
             *lock = Some(PowerGuard { child: Some(child) });

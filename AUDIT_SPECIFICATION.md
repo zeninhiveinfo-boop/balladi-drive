@@ -35,7 +35,7 @@ graph TD
 
 1. **`TransferMode::DriveFileDownload`**:
    * Evaluated via `is_google_drive_fs(src)` (checking both `gdrive:` and `gdrive,root_folder_id=`).
-   * Executed using rclone's `backend/command` `copyid` with multi-thread chunk streaming (`--drive-chunk-size 128M`, `--buffer-size 64M`, `--multi-thread-streams 4`, `--multi-thread-cutoff 50M`).
+   * Executed using rclone's `backend/command` `copyid` with four-way multi-thread downloading (`--buffer-size 16M`, `--multi-thread-streams 4`, `--multi-thread-cutoff 50M`). `--drive-chunk-size 128M` is upload-only.
    * Destination directory creation failures are propagated immediately before starting the job.
 
 2. **`TransferMode::LocalFileUpload`**:
@@ -92,7 +92,9 @@ graph TD
 
 ---
 
-## 6. Automated Verification Suite (26 Unit Tests)
+## 6. Automated Verification Suite
+
+The production gate runs 40 Rust unit/async tests, 10 frontend unit tests, a TypeScript/Vite production build, and strict Rust Clippy checks. The foundational transfer acceptance cases include:
 
 1. `parsed_single_file_connection_routes_to_copyid`: Validates single-file Google Drive links route to `DriveFileDownload`.
 2. `select_transfer_route_matrix`: Validates the complete routing matrix for all combinations of links, file paths, directories, and flags.

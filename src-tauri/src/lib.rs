@@ -653,7 +653,7 @@ impl ConnectStepExecutor for DefaultConnectStepExecutor {
     ) -> Result<(), String> {
         let mut cmd = tokio::process::Command::new(rclone_bin);
         apply_google_oauth_env_tokio(&mut cmd, creds);
-        cmd.args(&[
+        cmd.args([
             "config",
             "create",
             "gdrive",
@@ -686,7 +686,7 @@ impl ConnectStepExecutor for DefaultConnectStepExecutor {
     ) -> Result<(), String> {
         let mut probe_cmd = tokio::process::Command::new(rclone_bin);
         apply_google_oauth_env_tokio(&mut probe_cmd, creds);
-        probe_cmd.args(&["about", "gdrive:", "--config"]);
+        probe_cmd.args(["about", "gdrive:", "--config"]);
         probe_cmd.arg(candidate_conf_path);
 
         let probe = probe_cmd
@@ -958,7 +958,7 @@ async fn disconnect_google_drive(state: State<'_, AppState>) -> Result<serde_jso
     let rclone_bin = RcloneManager::find_rclone_binary();
     let mut cmd = tokio::process::Command::new(rclone_bin);
     let output = cmd
-        .args(&["config", "delete", "gdrive"])
+        .args(["config", "delete", "gdrive"])
         .output()
         .await
         .map_err(|e| format!("Could not disconnect Google Drive: {e}"))?;
@@ -1364,8 +1364,10 @@ mod tests {
             creds: creds.clone(),
         };
 
-        let mut executor_auth_fail = MockStepExecutor::default();
-        executor_auth_fail.fail_at_auth = true;
+        let executor_auth_fail = MockStepExecutor {
+            fail_at_auth: true,
+            ..Default::default()
+        };
 
         let res = execute_google_connect_transaction_with_executor(ctx, &executor_auth_fail).await;
         assert!(res.is_err());
@@ -1383,8 +1385,10 @@ mod tests {
             creds: creds.clone(),
         };
 
-        let mut executor_probe_fail = MockStepExecutor::default();
-        executor_probe_fail.fail_at_probe = true;
+        let executor_probe_fail = MockStepExecutor {
+            fail_at_probe: true,
+            ..Default::default()
+        };
 
         let res = execute_google_connect_transaction_with_executor(ctx, &executor_probe_fail).await;
         assert!(res.is_err());
@@ -1402,8 +1406,10 @@ mod tests {
             creds: creds.clone(),
         };
 
-        let mut executor_profile_fail = MockStepExecutor::default();
-        executor_profile_fail.fail_at_profile = true;
+        let executor_profile_fail = MockStepExecutor {
+            fail_at_profile: true,
+            ..Default::default()
+        };
 
         let res = execute_google_connect_transaction_with_executor(ctx, &executor_profile_fail).await;
         assert!(res.is_err());
@@ -1421,8 +1427,10 @@ mod tests {
             creds: creds.clone(),
         };
 
-        let mut executor_config_fail = MockStepExecutor::default();
-        executor_config_fail.fail_at_config_commit = true;
+        let executor_config_fail = MockStepExecutor {
+            fail_at_config_commit: true,
+            ..Default::default()
+        };
 
         let res = execute_google_connect_transaction_with_executor(ctx, &executor_config_fail).await;
         assert!(res.is_err());
@@ -1440,8 +1448,10 @@ mod tests {
             creds: creds.clone(),
         };
 
-        let mut executor_settings_fail = MockStepExecutor::default();
-        executor_settings_fail.fail_at_settings_commit = true;
+        let executor_settings_fail = MockStepExecutor {
+            fail_at_settings_commit: true,
+            ..Default::default()
+        };
 
         let res = execute_google_connect_transaction_with_executor(ctx, &executor_settings_fail).await;
         assert!(res.is_err());
@@ -1517,8 +1527,10 @@ mod tests {
             creds,
         };
 
-        let mut executor = MockStepExecutor::default();
-        executor.fail_at_settings_commit = true;
+        let executor = MockStepExecutor {
+            fail_at_settings_commit: true,
+            ..Default::default()
+        };
 
         // Make rclone.conf path impossible to write to during rollback to trigger rollback failure
         let res = execute_google_connect_transaction_with_executor(ctx, &executor).await;

@@ -11,7 +11,7 @@ When transferring multi-hundred-gigabyte media projects (RAW footage, proxies, a
 
 **Balladi Drive** provides a simple, dark-themed studio desktop GUI on top of `rclone`'s high-speed transfer daemon:
 * **No ZIP fragmentation**: Files stream directly into your folder structure.
-* **128 MB Chunk Streams**: Satures gigabit fiber connections on large 10GB–100GB+ video files.
+* **128 MiB Upload Chunks**: High-throughput Google Drive uploads with eight concurrent directory transfers.
 * **Instant Link Downloading**: Paste any Google Drive link (`/folders/ID` or `/file/d/ID`), and the app extracts the ID and downloads directly to your SSD.
 * **Camera Card Safe**: Empty directories (`RDC/`, `THUMB/`) and 0-byte `.XML`/`.BUP` files are strictly retained.
 * **Pre-Flight Hardware Checks**:
@@ -44,7 +44,7 @@ When transferring multi-hundred-gigabyte media projects (RAW footage, proxies, a
                             │ Localhost HTTP (RC API with Auth)
 ┌───────────────────────────▼─────────────────────────────┐
 │                 RCLONE ENGINE (Sidecar)                 │
-│  • Tuned Flags (128M chunks, tpslimit 8, fast-list)     │
+│  • Tuned Flags (128M upload chunks, fast-list)          │
 │  • Native MD5 Integrity Verification                   │
 │  • Jittered Exponential Backoff & Resume               │
 └───────────────────────────┬─────────────────────────────┘
@@ -119,4 +119,3 @@ The included GitHub Actions workflow (`.github/workflows/release.yml`) will auto
 
 Released under the [MIT License](LICENSE).  
 Transfer engine powered by [rclone](https://rclone.org) (MIT License). GUI powered by [Tauri 2.0](https://tauri.app) and React.
-

@@ -195,7 +195,7 @@ pub async fn get_google_access_token_with_credentials(
                 refresh_cmd.arg("--config").arg(cfg);
             }
             let out = refresh_cmd
-                .args(&["about", "gdrive:"])
+                .args(["about", "gdrive:"])
                 .output()
                 .await
                 .ok()?;
@@ -209,11 +209,7 @@ pub async fn get_google_access_token_with_credentials(
                 return None;
             }
 
-            if let Some(refreshed_token) = read_token(&conf_path) {
-                access_token = refreshed_token;
-            } else {
-                return None;
-            }
+            access_token = read_token(&conf_path)?;
         }
     }
 
@@ -286,7 +282,7 @@ pub async fn get_google_user_profile_with_credentials(
                 refresh_cmd.arg("--config").arg(cfg);
             }
             let out = refresh_cmd
-                .args(&["about", "gdrive:"])
+                .args(["about", "gdrive:"])
                 .output()
                 .await;
 

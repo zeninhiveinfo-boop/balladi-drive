@@ -189,7 +189,7 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
           </div>
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200/80 dark:border-blue-800/40 text-xs text-blue-700 dark:text-blue-300 font-medium">
             <Zap className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-            128 MB Chunk Streams
+            4-Way Parallel Streams
           </div>
         </div>
       </div>

@@ -584,6 +584,12 @@ impl Drop for RcloneManager {
     }
 }
 
+impl Default for RcloneManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RcloneManager {
     pub fn new() -> Self {
         let port = get_available_port().unwrap_or(5572);
@@ -705,7 +711,7 @@ impl RcloneManager {
                 let mut cmd = Command::new(&rclone_bin);
                 crate::apply_google_oauth_env_std(&mut cmd, creds);
 
-                cmd.args(&[
+                cmd.args([
                     "rcd",
                     "--rc-addr",
                     &addr,
@@ -1176,11 +1182,9 @@ impl RcloneManager {
                     if let Some(comma_idx) = clean.find(',') {
                         let id = &clean[..comma_idx];
                         let rest = &clean[comma_idx + 1..];
-                        let rk = if let Some(rk_idx) = rest.find("resource_key=") {
-                            Some(rest[rk_idx + "resource_key=".len()..].to_string())
-                        } else {
-                            None
-                        };
+                        let rk = rest.find("resource_key=").map(|rk_idx| {
+                            rest[rk_idx + "resource_key=".len()..].to_string()
+                        });
                         (id.to_string(), rk)
                     } else {
                         (clean.to_string(), None)

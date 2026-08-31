@@ -20,6 +20,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import { TransferStats, StorageInfo, TransferPhase } from "../types";
+import { resolveDisplayMetrics } from "../utils/transfer";
 
 export interface SessionMetrics {
   totalBytes: number;
@@ -79,6 +80,19 @@ export const TransfersView: React.FC<TransfersViewProps> = ({
 
   const activeStreams = stats?.transferring || [];
 
+  const displayMetrics = resolveDisplayMetrics(sessionMetrics, {
+    totalBytes: stats?.total_bytes || 0,
+    transferredBytes: stats?.bytes || 0,
+    completedFiles: stats?.transfers || 0,
+    alreadyOnDiskFiles: stats?.checks || 0,
+    percentage: stats?.percentage || 0,
+  });
+  const displayTotalBytes = displayMetrics.totalBytes;
+  const displayTransferredBytes = displayMetrics.transferredBytes;
+  const displayCompletedFiles = displayMetrics.completedFiles;
+  const displayAlreadyOnDisk = displayMetrics.alreadyOnDiskFiles;
+  const displayPercentage = displayMetrics.percentage;
+
   const formatBytes = (bytes: number) => {
     if (!bytes || bytes === 0) return "0 B";
     const k = 1024;
@@ -119,9 +133,7 @@ export const TransfersView: React.FC<TransfersViewProps> = ({
     }
 
     // 2. Instant client-side computation from cumulative session speed
-    const total = Math.max(sessionMetrics.totalBytes, stats?.total_bytes || 0);
-    const current = Math.max(sessionMetrics.transferredBytes, stats?.bytes || 0);
-    const remainingBytes = Math.max(0, total - current);
+    const remainingBytes = Math.max(0, displayTotalBytes - displayTransferredBytes);
 
     if (stats?.speed && stats.speed > 50000 && remainingBytes > 0) {
       const calculatedSecs = Math.round(remainingBytes / stats.speed);
@@ -133,7 +145,7 @@ export const TransfersView: React.FC<TransfersViewProps> = ({
     }
 
     return "Calculating...";
-  }, [isPaused, isOnline, isUpload, stats?.eta_seconds, stats?.total_bytes, stats?.bytes, stats?.speed, stats?.transferring, sessionMetrics.totalBytes, sessionMetrics.transferredBytes]);
+  }, [isPaused, isOnline, isUpload, stats?.eta_seconds, stats?.speed, stats?.transferring, displayTotalBytes, displayTransferredBytes]);
 
   const cleanFileName = (path: string) => {
     const parts = path.split("/");
@@ -152,31 +164,6 @@ export const TransfersView: React.FC<TransfersViewProps> = ({
     }
     return <FileText className="w-4 h-4 text-slate-400 flex-shrink-0" />;
   };
-
-  // Resilient Cumulative Session-level Metrics (preserves progress across pauses and resumes)
-  const displayTotalBytes = Math.max(
-    sessionMetrics.totalBytes,
-    stats?.total_bytes || 0
-  );
-
-  const displayTransferredBytes = Math.max(
-    sessionMetrics.transferredBytes,
-    stats?.bytes || 0
-  );
-
-  const displayCompletedFiles = Math.max(
-    sessionMetrics.completedFiles,
-    stats?.transfers || 0
-  );
-
-  const displayAlreadyOnDisk = Math.max(
-    sessionMetrics.alreadyOnDiskFiles,
-    stats?.checks || 0
-  );
-
-  const displayPercentage = displayTotalBytes > 0
-    ? Math.min(100, Math.max(0, (displayTransferredBytes / displayTotalBytes) * 100))
-    : (stats?.percentage || sessionMetrics.percentage || 0);
 
   const speedMbps = isPaused || !isOnline ? 0 : (stats?.speed_mbps || 0);
   const speedMBs = isPaused || !isOnline ? "0.0" : (((stats?.speed || 0) / (1024 * 1024)).toFixed(1));
