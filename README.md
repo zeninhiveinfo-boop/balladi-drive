@@ -109,9 +109,11 @@ git push --tags
 ```
 The included GitHub Actions workflow (`.github/workflows/release.yml`) will automatically:
 1. Validate release environment secrets (`BALLADI_GOOGLE_CLIENT_ID`, `BALLADI_GOOGLE_CLIENT_SECRET`).
-2. Compile and package the Apple Silicon macOS `.dmg` and Windows `.msi` installers.
-3. Bundle the tuned `rclone` binary.
-4. Publish a new GitHub Release with all download assets ready for your team.
+2. Compile and package Apple Silicon and Intel macOS `.dmg` files plus Windows x64 `.msi`/`.exe` installers.
+3. Verify installer integrity, target architecture, application version, and the bundled pinned `rclone` engine.
+4. Publish the draft only after every platform passes.
+
+The packages are intentionally unsigned for manual installation on Balladi Studios-managed devices. macOS Gatekeeper and Windows SmartScreen may display an unverified-developer warning.
 
 ---
 
