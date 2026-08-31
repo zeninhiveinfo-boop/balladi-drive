@@ -121,6 +121,22 @@ pub struct GoogleUserInfo {
     pub storage_used: Option<u64>,
 }
 
+pub fn default_rclone_conf_path() -> PathBuf {
+    #[cfg(windows)]
+    {
+        if let Some(app_data) = dirs::config_dir() {
+            return app_data.join("rclone/rclone.conf");
+        }
+    }
+    // On macOS and Linux, rclone's standard default is ~/.config/rclone/rclone.conf
+    if let Some(home) = dirs::home_dir() {
+        return home.join(".config/rclone/rclone.conf");
+    }
+    dirs::config_dir()
+        .map(|c| c.join("rclone/rclone.conf"))
+        .unwrap_or_else(|| PathBuf::from("rclone.conf"))
+}
+
 pub fn find_rclone_conf_path() -> Option<PathBuf> {
     let candidate_paths = [
         dirs::home_dir().map(|h| h.join(".config/rclone/rclone.conf")),
@@ -128,6 +144,10 @@ pub fn find_rclone_conf_path() -> Option<PathBuf> {
         dirs::home_dir().map(|h| h.join("Library/Application Support/rclone/rclone.conf")),
     ];
     candidate_paths.into_iter().flatten().find(|p| p.exists())
+}
+
+pub fn get_canonical_rclone_conf_path() -> PathBuf {
+    find_rclone_conf_path().unwrap_or_else(default_rclone_conf_path)
 }
 
 pub fn extract_gdrive_access_token(content: &str) -> Option<String> {

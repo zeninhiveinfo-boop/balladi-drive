@@ -5,7 +5,6 @@ pub mod system;
 use auth::drive::{get_google_user_profile, parse_google_drive_link, GoogleUserInfo, ParsedDriveLink};
 use engine::rclone::{RcloneManager, StartedTransfer, TransferMode, TransferStats, VerificationResult};
 use serde_json::Value;
-use std::path::PathBuf;
 use std::sync::Arc;
 use system::power::{acquire_sleep_lock, release_sleep_lock};
 use system::storage::{inspect_storage, StorageInfo};
@@ -885,12 +884,7 @@ async fn connect_google_drive(
         .and_then(|c| serde_json::from_str(c).ok())
         .unwrap_or_default();
 
-    let rclone_conf_path = crate::auth::drive::find_rclone_conf_path()
-        .unwrap_or_else(|| {
-            dirs::config_dir()
-                .map(|c| c.join("rclone/rclone.conf"))
-                .unwrap_or_else(|| PathBuf::from("rclone.conf"))
-        });
+    let rclone_conf_path = crate::auth::drive::get_canonical_rclone_conf_path();
 
     let mut target_settings = original_settings.clone();
     let is_custom = match oauth_mode.as_deref() {
@@ -960,10 +954,12 @@ async fn connect_google_drive(
 async fn disconnect_google_drive(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     state.rclone.stop_daemon();
 
+    let conf_path = crate::auth::drive::get_canonical_rclone_conf_path();
     let rclone_bin = RcloneManager::find_rclone_binary();
     let mut cmd = tokio::process::Command::new(rclone_bin);
     let output = cmd
-        .args(["config", "delete", "gdrive"])
+        .args(["config", "delete", "gdrive", "--config"])
+        .arg(&conf_path)
         .output()
         .await
         .map_err(|e| format!("Could not disconnect Google Drive: {e}"))?;
@@ -977,7 +973,8 @@ async fn disconnect_google_drive(state: State<'_, AppState>) -> Result<serde_jso
 
     // Verify using a fresh CLI listremotes, not the stopped daemon
     let list_output = tokio::process::Command::new(RcloneManager::find_rclone_binary())
-        .arg("listremotes")
+        .args(["listremotes", "--config"])
+        .arg(&conf_path)
         .output()
         .await
         .map_err(|e| format!("Failed to list remotes: {e}"))?;

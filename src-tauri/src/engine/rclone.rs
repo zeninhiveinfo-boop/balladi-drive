@@ -708,11 +708,18 @@ impl RcloneManager {
                 let rclone_bin = Self::find_rclone_binary();
                 let addr = format!("127.0.0.1:{}", self.port);
 
+                let conf_path = crate::auth::drive::get_canonical_rclone_conf_path();
+                if let Some(parent) = conf_path.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+
                 let mut cmd = Command::new(&rclone_bin);
                 crate::apply_google_oauth_env_std(&mut cmd, creds);
 
                 cmd.args([
                     "rcd",
+                    "--config",
+                    &conf_path.to_string_lossy(),
                     "--rc-addr",
                     &addr,
                     "--rc-user",
