@@ -221,5 +221,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = "true"
-          gh release edit "$RELEASE_TAG" --draft=false --latest
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = "true"
+          gh release edit "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --draft=false \
+            --latest
