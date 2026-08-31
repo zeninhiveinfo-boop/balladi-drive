@@ -1,3 +1,4 @@
+#[cfg(target_os = "macos")]
 use std::process::{Child, Command};
 use std::sync::Mutex;
 

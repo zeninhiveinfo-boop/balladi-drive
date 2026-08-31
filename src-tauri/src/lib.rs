@@ -96,6 +96,11 @@ pub fn write_file_atomic(path: &std::path::Path, data: &[u8], is_private: bool) 
         let _ = std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o600));
     }
 
+    // Windows does not expose Unix permission bits. Keep the shared API explicit
+    // without producing a platform-only unused-variable warning.
+    #[cfg(not(unix))]
+    let _ = is_private;
+
     std::fs::rename(&tmp_path, path)
         .map_err(|e| format!("Failed committing atomic file to {}: {}", path.display(), e))?;
 

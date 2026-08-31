@@ -1742,6 +1742,9 @@ mod tests {
             "shot?.mp4",
             "take*.wav",
             "{final}.jpg",
+            // A backslash is a valid filename character on Unix, but it is a
+            // path separator on Windows and cannot represent one filename there.
+            #[cfg(not(target_os = "windows"))]
             "back\\slash.txt",
         ];
 
