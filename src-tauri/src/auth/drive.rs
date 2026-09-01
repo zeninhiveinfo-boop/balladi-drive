@@ -210,6 +210,7 @@ pub async fn get_google_access_token_with_credentials(
         if r.status() == reqwest::StatusCode::UNAUTHORIZED {
             let bin = crate::engine::rclone::RcloneManager::find_rclone_binary();
             let mut refresh_cmd = tokio::process::Command::new(&bin);
+            crate::system::process::hide_tokio_command_window(&mut refresh_cmd);
             crate::apply_google_oauth_env_tokio(&mut refresh_cmd, creds);
             if let Some(cfg) = rclone_conf_path {
                 refresh_cmd.arg("--config").arg(cfg);
@@ -297,6 +298,7 @@ pub async fn get_google_user_profile_with_credentials(
         if r.status() == reqwest::StatusCode::UNAUTHORIZED {
             let bin = crate::engine::rclone::RcloneManager::find_rclone_binary();
             let mut refresh_cmd = tokio::process::Command::new(&bin);
+            crate::system::process::hide_tokio_command_window(&mut refresh_cmd);
             crate::apply_google_oauth_env_tokio(&mut refresh_cmd, creds);
             if let Some(cfg) = rclone_conf_path {
                 refresh_cmd.arg("--config").arg(cfg);

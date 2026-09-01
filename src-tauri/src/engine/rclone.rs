@@ -12,6 +12,8 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::Duration;
 
+use crate::system::process::hide_std_command_window;
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DriveFileMetadata {
@@ -304,6 +306,10 @@ pub struct TransferRequest {
     pub mode: TransferMode,
 }
 
+fn normalize_download_destination(dst: &str) -> String {
+    format!("{}/", dst.trim_end_matches(['/', '\\']).replace('\\', "/"))
+}
+
 pub fn is_google_drive_fs(value: &str) -> bool {
     value.starts_with("gdrive:") || value.starts_with("gdrive,")
 }
@@ -371,7 +377,7 @@ pub fn build_transfer_request(
             std::fs::create_dir_all(dst).map_err(|error| {
                 format!("Could not create download destination '{}': {}", dst, error)
             })?;
-            let dst_dir = format!("{}/", dst.trim_end_matches('/'));
+            let dst_dir = normalize_download_destination(dst);
 
             // Parse clean file ID (strip any resource_key or parameters)
             let (file_id, fs_name) = if let Some(idx) = src.find("root_folder_id=") {
@@ -409,7 +415,7 @@ pub fn build_transfer_request(
                 params: json!({
                     "command": "copyid",
                     "fs": fs_name,
-                    "args": [file_id, dst_dir],
+                    "arg": [file_id, dst_dir],
                     "_async": true,
                     "_config": cfg
                 }),
@@ -714,6 +720,7 @@ impl RcloneManager {
                 }
 
                 let mut cmd = Command::new(&rclone_bin);
+                hide_std_command_window(&mut cmd);
                 crate::apply_google_oauth_env_std(&mut cmd, creds);
 
                 cmd.args([
@@ -1740,6 +1747,41 @@ mod tests {
         assert!(err.unwrap_err().contains("Could not create download destination"));
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn single_file_download_uses_copyid_rc_contract() {
+        let temp_dir = std::env::temp_dir().join("balladi_copyid_contract_test");
+        let request = build_transfer_request(
+            "gdrive,root_folder_id=file-123,resource_key=key-456:",
+            &temp_dir.to_string_lossy(),
+            TransferMode::DriveFileDownload,
+        )
+        .unwrap();
+
+        assert_eq!(request.method, "backend/command");
+        assert_eq!(request.params["command"], "copyid");
+        assert_eq!(request.params["fs"], "gdrive,resource_key=key-456:");
+        assert_eq!(request.params["arg"][0], "file-123");
+        assert!(request.params.get("args").is_none());
+        assert!(request.params["arg"][1]
+            .as_str()
+            .expect("copyid destination must be a string")
+            .ends_with('/'));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn windows_download_destination_is_rc_safe() {
+        assert_eq!(
+            normalize_download_destination(r"C:\Users\Editor\Downloads\Balladi\"),
+            "C:/Users/Editor/Downloads/Balladi/"
+        );
+        assert_eq!(
+            normalize_download_destination("/Users/editor/Downloads///"),
+            "/Users/editor/Downloads/"
+        );
     }
 
     #[test]

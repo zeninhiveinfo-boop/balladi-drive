@@ -94,7 +94,7 @@ graph TD
 
 ## 6. Automated Verification Suite
 
-The production gate runs 40 Rust unit/async tests, 10 frontend unit tests, a TypeScript/Vite production build, and strict Rust Clippy checks. The foundational transfer acceptance cases include:
+The production gate runs 42 Rust unit/async tests, 10 frontend unit tests, a TypeScript/Vite production build, and strict Rust Clippy checks. The foundational transfer acceptance cases include:
 
 1. `parsed_single_file_connection_routes_to_copyid`: Validates single-file Google Drive links route to `DriveFileDownload`.
 2. `select_transfer_route_matrix`: Validates the complete routing matrix for all combinations of links, file paths, directories, and flags.
@@ -122,3 +122,5 @@ The production gate runs 40 Rust unit/async tests, 10 frontend unit tests, a Typ
 24. `test_webhook_allowlist_valid`: Validates permitted webhook endpoints.
 25. `test_webhook_allowlist_rejects_ssrf_and_http`: Enforces SSRF and HTTP protocol rejection.
 26. `test_parse_job_ids_ignores_finished`: Ensures finished job cleanup from status maps.
+27. `single_file_download_uses_copyid_rc_contract`: Enforces rclone's singular `arg` field, preserves resource keys, and rejects the invalid `args` payload.
+28. `windows_download_destination_is_rc_safe`: Verifies Windows paths are slash-normalized with exactly one trailing separator for `copyid` destination semantics.

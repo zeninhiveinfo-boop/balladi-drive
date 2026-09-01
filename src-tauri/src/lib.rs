@@ -7,6 +7,7 @@ use engine::rclone::{RcloneManager, StartedTransfer, TransferMode, TransferStats
 use serde_json::Value;
 use std::sync::Arc;
 use system::power::{acquire_sleep_lock, release_sleep_lock};
+use system::process::hide_tokio_command_window;
 use system::storage::{inspect_storage, StorageInfo};
 use tauri::State;
 use tauri_plugin_dialog::DialogExt;
@@ -656,6 +657,7 @@ impl ConnectStepExecutor for DefaultConnectStepExecutor {
         creds: &RcloneOAuthCredentials,
     ) -> Result<(), String> {
         let mut cmd = tokio::process::Command::new(rclone_bin);
+        hide_tokio_command_window(&mut cmd);
         apply_google_oauth_env_tokio(&mut cmd, creds);
         cmd.args([
             "config",
@@ -689,6 +691,7 @@ impl ConnectStepExecutor for DefaultConnectStepExecutor {
         creds: &RcloneOAuthCredentials,
     ) -> Result<(), String> {
         let mut probe_cmd = tokio::process::Command::new(rclone_bin);
+        hide_tokio_command_window(&mut probe_cmd);
         apply_google_oauth_env_tokio(&mut probe_cmd, creds);
         probe_cmd.args(["about", "gdrive:", "--config"]);
         probe_cmd.arg(candidate_conf_path);
@@ -957,6 +960,7 @@ async fn disconnect_google_drive(state: State<'_, AppState>) -> Result<serde_jso
     let conf_path = crate::auth::drive::get_canonical_rclone_conf_path();
     let rclone_bin = RcloneManager::find_rclone_binary();
     let mut cmd = tokio::process::Command::new(rclone_bin);
+    hide_tokio_command_window(&mut cmd);
     let output = cmd
         .args(["config", "delete", "gdrive", "--config"])
         .arg(&conf_path)
@@ -972,7 +976,9 @@ async fn disconnect_google_drive(state: State<'_, AppState>) -> Result<serde_jso
     }
 
     // Verify using a fresh CLI listremotes, not the stopped daemon
-    let list_output = tokio::process::Command::new(RcloneManager::find_rclone_binary())
+    let mut list_cmd = tokio::process::Command::new(RcloneManager::find_rclone_binary());
+    hide_tokio_command_window(&mut list_cmd);
+    let list_output = list_cmd
         .args(["listremotes", "--config"])
         .arg(&conf_path)
         .output()
